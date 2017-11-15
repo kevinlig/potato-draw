@@ -1,5 +1,7 @@
-import './scss/style.scss';
+// entry point for webpack
 
-import startApp from './startApp';
+// import the stylesheets
+require('./scss/style.scss');
 
-startApp();
+// start the JS
+require('./js/app.js');

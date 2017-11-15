@@ -1,74 +1,90 @@
+const webpack = require('webpack');
 const path = require('path');
-const DefinePlugin = require('webpack/lib/DefinePlugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
+const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
 
 module.exports = {
-    entry: "./src/main.js",
+    context: path.resolve(__dirname, './src'),
+    entry: {
+        vendor: ['fabric'],
+        app: './main.js'
+    },
     output: {
-        filename: "app.[hash].js",
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(__dirname, './dist'),
+        publicPath: '',
+        filename: 'js/[name].js'
     },
     resolve: {
-        extensions: ['.js', '.jsx']
+        extensions: ['.js'],
+        modules: [
+            path.resolve(__dirname, './src/js'),
+            path.resolve(__dirname, './node_modules'),
+            path.resolve(__dirname, './src/scss')
+        ]
     },
     module: {
-        rules: [
+        loaders: [
             {
-                test: /\.jsx?$/,
+                test: /.node$/,
+                use: 'node-loader'
+            },
+            {
+                test: /\.js$/,
                 exclude: /node_modules/,
                 loader: 'babel-loader',
                 query: {
-                    presets: [
-                        'es2015',
-                        'react'
-                    ],
-                    plugins: []
+                    cacheDirectory: path.resolve(__dirname, './cache'),
+                    compact: true
                 }
             },
             {
                 test: /\.scss$/,
-                use: [
-                    {
-                        loader: 'style-loader'
-                    },
-                    {
-                        loader: 'css-loader',
-                        options: {
-                            sourceMap: false
+                use: ExtractTextPlugin.extract({
+                    fallback: 'style-loader',
+                    use: [
+                        {
+                            loader: 'css-loader'
+                        },
+                        {
+                            loader: 'sass-loader',
+                            options: {
+                                includePaths: ['./src/scss']
+                            }
                         }
-                    },
-                    {
-                        loader: 'sass-loader',
-                        options: {
-                            sourceMap: false
-                        }
-                    }
-                ]
+                    ]
+                })
+            },
+            {
+                include: /assets(\/|\\)/,
+                loader: 'file-loader',
+                query: {
+                    name: '[path][name].[ext]'
+                }
             }
         ]
     },
     plugins: [
-        new CleanWebpackPlugin(['dist'], {
-            root: path.resolve(__dirname, '.'),
-            exclude: '.gitignore'
+        new CleanWebpackPlugin(['dist', 'cache'], {
+            root: path.resolve(__dirname)
+        }),
+        new ExtractTextPlugin({
+            filename: 'css/style.css',
+            allChunks: true
         }),
         new HtmlWebpackPlugin({
-            inject: true,
-            template: path.resolve(__dirname, './static/index.html'),
-            minify: {
-                minifyJS: true,
-                minifyCSS: true
-            }
+            inject: false,
+            template: path.resolve(__dirname, './src/index.html'),
+            filename: 'index.html'
         }),
-        new DefinePlugin({
-            'process.env': {
-                NODE_ENV: '"production"'
-            }
-        }),
-        new UglifyJSPlugin({
-            compress: true
+        new webpack.optimize.CommonsChunkPlugin({
+            name: 'vendor'
         })
-    ]
+    ],
+    devServer: {
+        contentBase: path.resolve(__dirname, 'dist'),
+        host: '0.0.0.0', // this allows VMs to access the server
+        port: 3000,
+        disableHostCheck: true
+    }
 };
