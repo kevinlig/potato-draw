@@ -13,4 +13,9 @@
     &:active, &:hover {
         background-color: $color-light;
     }
+
+    &[disabled] {
+        background-color: lighten($color-base, 40%);
+        cursor: not-allowed;
+    }
 }

@@ -7,7 +7,7 @@ const CleanWebpackPlugin = require('clean-webpack-plugin');
 module.exports = {
     context: path.resolve(__dirname, './src'),
     entry: {
-        vendor: ['fabric'],
+        vendor: ['fabric', 'three'],
         app: './main.js'
     },
     output: {
@@ -21,7 +21,10 @@ module.exports = {
             path.resolve(__dirname, './src/js'),
             path.resolve(__dirname, './node_modules'),
             path.resolve(__dirname, './src/scss')
-        ]
+        ],
+        alias: {
+            ThreeExtras: path.resolve(__dirname, './node_modules/three/examples/js')
+        }
     },
     module: {
         loaders: [

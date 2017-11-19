@@ -1,4 +1,5 @@
 // entry point for webpack
+require.context('./assets', true);
 
 // import the stylesheets
 require('./scss/style.scss');

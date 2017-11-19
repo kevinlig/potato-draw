@@ -5,10 +5,11 @@ import firebaseConfig from '../../../firebaseConfig';
 
 class NetworkManager {
     constructor() {
-
+        this.user = null;
+        this.activeUsers = {};
     }
 
-    connectToFirebase(username) {
+    connectToFirebase() {
         const app = firebase.initializeApp(firebaseConfig);
 
         this.database = app.database();
@@ -17,11 +18,33 @@ class NetworkManager {
         this.database.ref('/users').on('value', (snapshot) => {
             const value = snapshot.val();
             console.log(value);
+        });        
+    }
+
+    registerUser(username) {
+        this.user = {
+            name: username,
+            joined: Date.now(),
+            alive: Date.now()
+        };
+
+        window.setTimeout(() => {
+            this.sendHeartbeat();
+        }, 10000);
+
+        return this.database.ref(`/users/${username}`).set(this.user);
+    }
+
+    sendHeartbeat() {
+        this.user = Object.assign({}, this.user, {
+            alive: Date.now()
         });
 
-        // create a new user
-        this.database.ref(`/users/${username}`).set('hello');
-        
+        this.database.ref(`/users/${this.user.name}`).set(this.user);
+
+        window.setTimeout(() => {
+            this.sendHeartbeat();
+        }, 10000);
     }
 }
 
