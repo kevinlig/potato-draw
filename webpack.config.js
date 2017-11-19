@@ -16,7 +16,7 @@ module.exports = {
         filename: 'js/[name].js'
     },
     resolve: {
-        extensions: ['.js'],
+        extensions: ['.js', '.jsx'],
         modules: [
             path.resolve(__dirname, './src/js'),
             path.resolve(__dirname, './node_modules'),
@@ -30,7 +30,7 @@ module.exports = {
                 use: 'node-loader'
             },
             {
-                test: /\.js$/,
+                test: /\.jsx?$/,
                 exclude: /node_modules/,
                 loader: 'babel-loader',
                 query: {

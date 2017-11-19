@@ -1,9 +1,9 @@
-// import { fabric } from 'fabric';
+import React from 'react';
+import ReactDOM from 'react-dom';
 
-// const canvas = new fabric.Canvas(document.querySelector('#draw-pad'));
+import App from 'components/App';
 
-import Canvas from 'canvas/Canvas';
-
-document.addEventListener('DOMContentLoaded', () => {
-    const canvas = new Canvas();
-});
+ReactDOM.render(
+    <App />,
+    document.getElementById('app')
+);

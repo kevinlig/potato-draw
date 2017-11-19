@@ -3,6 +3,8 @@ import Mousetrap from 'mousetrap';
 
 import Menu from './Menu';
 
+import NetworkManager from 'network/NetworkManager';
+
 class Canvas {
     constructor() {
         this.toggleDrawing = this.toggleDrawing.bind(this);
@@ -16,6 +18,9 @@ class Canvas {
         this.pickedGreen = this.pickedGreen.bind(this);
         this.addText = this.addText.bind(this);
 
+        this.receiveFile = this.receiveFile.bind(this);
+        this.prepareToReceiveFile = this.prepareToReceiveFile.bind(this);
+
         this.state = {
             isDrawing: false,
             color: '#424242',
@@ -23,6 +28,8 @@ class Canvas {
 
         this._buildCanvas();
         this._buildMenu();
+
+        this._connect();
     }
 
     setState(newState) {
@@ -121,8 +128,37 @@ class Canvas {
         this.fabric.clear();
     }
 
+    prepareToReceiveFile(e) {
+        e.preventDefault();
+    }
+
+    receiveFile(e) {
+        e.preventDefault();
+
+        // read the file
+        const file = e.dataTransfer.files[0];
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onloadend = () => {
+            const data = reader.result;
+
+            // create an image and add it to the canvas
+            fabric.Image.fromURL(data, (img) => {
+                img.top = e.offsetY;
+                img.left = e.offsetX;
+
+                this.fabric.add(img);
+                img.bringToFront();
+                this.fabric.renderAll();
+            });
+            
+        };
+
+    }
+
     _buildCanvas() {
         this.element = document.querySelector('#draw-pad');
+        const appElement = document.querySelector('#app');
 
         if (!this.fabric) {
             // set up the fabric element
@@ -131,6 +167,11 @@ class Canvas {
 
         // bind keyboard events
         Mousetrap.bind(['del', 'backspace'], this.deleteItems);
+
+        // also allow the canvas div wrapper to accept files
+        appElement.addEventListener('dragenter', this.prepareToReceiveFile);
+        appElement.addEventListener('dragover', this.prepareToReceiveFile);
+        appElement.addEventListener('drop', this.receiveFile);
     }
 
     _buildMenu() {
@@ -139,6 +180,11 @@ class Canvas {
             element: menuDiv,
             canvas: this
         });
+    }
+
+    _connect() {
+        const username = window.prompt('Enter a user name');
+        NetworkManager.connectToFirebase(username);
     }
 }
 

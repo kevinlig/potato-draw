@@ -1,0 +1,16 @@
+@mixin flatButton {
+    box-shadow: none;
+    transition-property: background-color;
+    transition-duration: 0.3s;
+    background-color: $color-base;
+    color: #FFFFFF;
+    font-size: 14px;
+    text-shadow: none;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 25px;
+
+    &:active, &:hover {
+        background-color: $color-light;
+    }
+}

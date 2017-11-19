@@ -1,0 +1,9 @@
+$color-base: #0d47a1;
+$color-light: #5472d3;
+$color-dark: #002171;
+
+@mixin media($minSize) {
+    @media (min-width: $minSize) {
+        @content;
+    }
+}

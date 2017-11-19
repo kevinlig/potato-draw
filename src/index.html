@@ -7,38 +7,7 @@
     <link rel="stylesheet" href="<%= htmlWebpackPlugin.files.css %>" />
 </head>
 <body>
-    <div id="app">
-        <div
-            id="menu"
-            class="menu">
-            <button
-                class="draw-button">
-                <div class="ion-edit" />
-            </button>
-            <button
-                class="text-button">
-                T
-            </button>
-            <button
-                class="delete-button">
-                <div class="ion-trash-b" />
-            </button>
-            <button
-                class="color-button black" />
-            <button
-                class="color-button red" />
-            <button
-                class="color-button green" />
-            <button
-                class="color-button blue" />
-        </div>
-        <canvas
-            id="draw-pad"
-            class="potato-pad"
-            width="1500"
-            height="1500">
-        </canvas>
-    </div>
+    <div id="app"></div>
     <script type="text/javascript" src="<%= htmlWebpackPlugin.files.chunks.vendor.entry %>"></script>
     <script type="text/javascript" src="<%= htmlWebpackPlugin.files.chunks.app.entry %>"></script>
 </body>
