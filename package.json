@@ -37,9 +37,11 @@
     "babel-preset-react": "^6.24.1",
     "fabric": "^1.7.20",
     "firebase": "^4.6.2",
+    "lodash": "^4.17.4",
     "mousetrap": "^1.6.1",
     "react": "^16.1.1",
     "react-dom": "^16.1.1",
+    "simple-peer": "^8.1.1",
     "three": "^0.88.0",
     "webrtc-adapter": "^6.0.1"
   }

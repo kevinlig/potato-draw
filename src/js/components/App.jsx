@@ -11,11 +11,13 @@ export default class App extends React.Component {
         this.state = {
             activeScreen: 'login',
             user: '',
-            online: [],
+            online: {},
+            host: '',
             isHost: false
         };
 
         this.registerUser = this.registerUser.bind(this);
+        this.receiveUserUpdates = this.receiveUserUpdates.bind(this);
     }
 
     componentDidMount() {
@@ -23,8 +25,16 @@ export default class App extends React.Component {
     }
 
     connectToNetwork() {
+        NetworkManager.receivers['app'] = this.receiveUserUpdates;
         NetworkManager.connectToFirebase();
+
     }
+
+    receiveUserUpdates(users) {
+        this.setState({
+            online: users
+        });
+    };
 
     registerUser(username) {
         NetworkManager.registerUser(username)

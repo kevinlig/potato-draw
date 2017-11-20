@@ -38,7 +38,14 @@ export default class Login extends React.Component {
     }
 
     roomContents() {
-        return 'There are currently no other users.';
+        const usernames = Object.keys(this.props.online);
+        if (usernames.length === 0) {
+            return 'There are currently no other users.';
+        }
+        else if (usernames.length === 1) {
+            return 'There is currently 1 user online.';
+        }
+        return `There are currently ${usernames.length} users online.`;
     }
 
     render() {
