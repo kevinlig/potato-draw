@@ -37,17 +37,6 @@ export default class Login extends React.Component {
         this.props.registerUser(this.state.username);   
     }
 
-    roomContents() {
-        const usernames = Object.keys(this.props.online);
-        if (usernames.length === 0) {
-            return 'There are currently no other users.';
-        }
-        else if (usernames.length === 1) {
-            return 'There is currently 1 user online.';
-        }
-        return `There are currently ${usernames.length} users online.`;
-    }
-
     render() {
         return (
             <div className="login-screen">
@@ -61,9 +50,6 @@ export default class Login extends React.Component {
                             <h1>Potato v2</h1>
                             <h2>User Lobby</h2>
                             <hr className="header-line" />
-                        </div>
-                        <div className="room-info">
-                            {this.roomContents()}
                         </div>
                         <form className="login-form">
                             <label htmlFor="username">

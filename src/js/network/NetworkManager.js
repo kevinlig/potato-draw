@@ -20,7 +20,7 @@ class NetworkManager {
 
         this.connections = {};
 
-        this.receivers = {};
+        this.appRef = null;
     }
 
     connectToFirebase() {
@@ -33,19 +33,31 @@ class NetworkManager {
             const value = snapshot.val();
             const users = Object.assign({}, value);
             delete users.__lastCleanup;
-
-            for (const id in this.receivers) {
-                const receiver = this.receivers[id];
-                receiver(users);
-            }
-
-            this.activeUsers = users;
+            this.activeUsers = this.removeDeadUsers(users);
 
             // remove old users from the database
             if (!this.cleanedUp) {
                 this.cleanupUsers(value);
             }
         });
+    }
+
+    removeDeadUsers(users) {
+        const now = Date.now();
+        const livingUsers = {};
+        for (const username in users) {
+            const user = users[username];
+            if (now - user.alive <= 30000) {
+                // user pinged a heartbeat in the last 30 seconds
+                livingUsers[username] = user;
+            }
+            else if (this.connections[username]) {
+                // the user is offline but there was a previous connection to them, remove it
+                this.connections[username].destroy();
+            }
+        }
+
+        return livingUsers;
     }
 
     cleanupUsers(users) {
@@ -59,8 +71,8 @@ class NetworkManager {
         const newUsers = Object.assign({}, users);
         for (const username in users) {
             const user = users[username];
-            if (now - user.alive > 60000) {
-                // user hasn't responded in 60 seconds, remove
+            if (now - user.alive > 30000) {
+                // user hasn't responded in 30 seconds, remove
                 delete newUsers[username];
             }
         }
@@ -110,8 +122,13 @@ class NetworkManager {
                 // this connection already exists
                 continue;
             }
-            else if (now - users[username].alive > 60000) {
-                // user hasn't been alive for over 60 seconds, assume they're offline
+            else if (now - users[username].alive > 30000) {
+                // user hasn't been alive for over 30 seconds, assume they're offline
+                if (this.connections[username]) {
+                    // delete this user's connection
+                    this.connections[username].destroy();
+                    delete this.connections[username];
+                }
                 continue;
             }
 
@@ -120,29 +137,43 @@ class NetworkManager {
     }
 
     connectToUser(username) {
-        const peerConnection = new SimplePeer({ 
-            initiator: true,
+        const peerConnection = this.createPeerConnection(username, true);
+        this.connections[username] = peerConnection;
+    }
+
+    createPeerConnection(username, initiator = false) {
+        const peerConnection = new SimplePeer({
+            initiator,
             config: connectionServers
         });
-        this.connections[username] = peerConnection;
 
-        peerConnection.on('signal', (data) => {
-            // signal is ready, send it to the recipient
-            console.log(`signal ready for ${username}`);
-            console.log(`this is an offer`);
-            this.sendSignalToRecipient(username, data);
-            
+        peerConnection.on('signal', (response) => {
+            this.sendSignalToRecipient(username, response);
         });
 
         peerConnection.on('connect', () => {
-            console.log(`${username} is connected!`);
-            console.log('sending message HELLO');
-            this.sendData(username, 'Hello there!');
+            if (this.appRef) {
+                this.appRef.connectedToPeer(username);
+            }
+        });
+        
+        peerConnection.on('data', (data) => {
+            if (this.appRef) {
+                this.appRef.receivedMessage(username, JSON.parse(data));
+            }
         });
 
-        peerConnection.on('data', (data) => {
-            console.log(`RECEIVED MESSAGE: ${data}`);
+        peerConnection.on('close', () => {
+            if (this.connections[username]) {
+                // remoe the connection from our connection list
+                delete this.connections[username];
+            }
+            if (this.appRef) {
+                this.appRef.disconnectedFromPeer(username);
+            }
         });
+
+        return peerConnection;
     }
 
     completeOutboundConnection(username, data) {
@@ -161,11 +192,11 @@ class NetworkManager {
             for (const username in signals) {
                 const signal = JSON.parse(signals[username]);
                 if (this.connections[username]) {
-                    // this is a response to an outbound connection, complete it
+                    // this is a response to a pending outbound connection, complete it
                     this.completeOutboundConnection(username, signal);
                 }
                 else if (!this.connections[username]) {
-                    // a new user has connected or an old user has reconnected
+                    // a new user has connected
                     this.acceptInboundConnection(username, signal);
                 }
             }
@@ -173,25 +204,8 @@ class NetworkManager {
     }
 
     acceptInboundConnection(username, signal) {
-        console.log(`received request from ${username}`);
-
-        const inboundConnection = new SimplePeer({
-            config: connectionServers
-        });
+        const inboundConnection = this.createPeerConnection(username, false);
         this.connections[username] = inboundConnection;
-
-        inboundConnection.on('signal', (response) => {
-            console.log(`sending response signal to ${username}`);
-            this.sendSignalToRecipient(username, response);
-        });
-
-        inboundConnection.on('connect', () => {
-            console.log(`connected to ${username}`);
-        });
-        
-        inboundConnection.on('data', (data) => {
-            console.log(`RECEIVED MESSAGE: ${data}`);
-        });
         // injest the signal
         inboundConnection.signal(signal);
     }
@@ -199,11 +213,17 @@ class NetworkManager {
     sendData(recipient, data) {
         let connection = this.connections[recipient];
         if (!connection) {
-            console.log(`not connected to ${recipient}`);
+            console.log(`Not connected to ${recipient}`);
             return;
         }
 
-        connection.send(data);
+        connection.send(JSON.stringify(data));
+    }
+
+    broadcastData(data) {
+        for (const username in this.connections) {
+            this.sendData(username, data);
+        }
     }
 }
 

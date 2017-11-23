@@ -38,7 +38,7 @@ export default class Background extends React.Component {
         });
 
         this.renderer.setSize(screenSize.width, screenSize.height);
-        this.renderer.devicePixelRatio = window.devicePixelRatio;
+        this.renderer.setPixelRatio(window.devicePixelRatio);
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0xefefef);

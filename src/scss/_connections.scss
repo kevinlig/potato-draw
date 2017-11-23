@@ -1,0 +1,95 @@
+.active-connections {
+    position: fixed;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    left: 0;
+    right: 0;
+
+    z-index: 2;
+
+    .content {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        background-color: #ffffff;
+        box-shadow: 0px 3px 10px #888888;
+
+        padding: 5px 10px;
+    }
+
+    .section-header {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+
+        .icon {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            font-size: 20px;
+            line-height: 30px;
+            margin-right: 5px;
+            text-align: center;
+        }
+
+        .label {
+            flex: 1 1 auto;
+            height: 30px;
+            line-height: 30px;
+            font-size: 16px;
+            @include headerStyle;
+            text-transform: uppercase;
+        }
+    }
+
+    .connection-list {
+        flex: 1 1 auto;
+
+        .no-connections {
+            @include headerStyle;
+            text-transform: uppercase;
+            line-height: 30px;
+            font-size: 16px;
+
+            &.hide {
+                display: none;
+            }
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+            margin: 0;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+
+            &.hide {
+                display: none;
+            }
+
+            li {
+                flex: 1 1 auto;
+                margin: 0;
+                .icon {
+                    font-size: 20px;
+                    line-height: 30px;
+                    margin-right: 10px;
+                }
+            }
+        }
+    }
+}
+
+.tippy-toolip {
+    @include headerStyle;
+}

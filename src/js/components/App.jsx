@@ -3,6 +3,7 @@ import React from 'react';
 import NetworkManager from 'network/NetworkManager';
 
 import Login from 'components/login/Login';
+import Canvas from 'components/canvas/Canvas';
 
 export default class App extends React.Component {
     constructor(props) {
@@ -11,13 +12,17 @@ export default class App extends React.Component {
         this.state = {
             activeScreen: 'login',
             user: '',
-            online: {},
             host: '',
-            isHost: false
+            peers: [],
+            isHost: false,
+            renderId: 0,
+            canvasState: {}
         };
 
         this.registerUser = this.registerUser.bind(this);
-        this.receiveUserUpdates = this.receiveUserUpdates.bind(this);
+        this.connectedToPeer = this.connectedToPeer.bind(this);
+        this.disconnectedFromPeer = this.disconnectedFromPeer.bind(this);
+        this.broadcastMessage = this.broadcastMessage.bind(this);
     }
 
     componentDidMount() {
@@ -25,24 +30,62 @@ export default class App extends React.Component {
     }
 
     connectToNetwork() {
-        NetworkManager.receivers['app'] = this.receiveUserUpdates;
+        NetworkManager.appRef = this;
         NetworkManager.connectToFirebase();
 
     }
-
-    receiveUserUpdates(users) {
-        this.setState({
-            online: users
-        });
-    };
 
     registerUser(username) {
         NetworkManager.registerUser(username)
             .then(() => {
                 this.setState({
-                    user: username
+                    user: username,
+                    activeScreen: 'canvas'
                 });
             });
+    }
+
+    connectedToPeer(peer) {
+        this.setState({
+            peers: [...this.state.peers, peer]
+        });
+    }
+
+    disconnectedFromPeer(peer) {
+        const clonedPeers = Array.from(this.state.peers);
+        const index = this.state.peers.indexOf(peer);
+        clonedPeers.splice(index, 1);
+        this.setState({
+            peers: clonedPeers
+        });
+    }
+
+
+    receivedMessage(sender, data) {
+        if (data.id <= this.state.renderId) {
+            // this is an outdated canvas iteration, discard it
+            return;
+        }
+
+        this.setState({
+            renderId: data.id,
+            canvasState: data.data
+        });
+    }
+
+    broadcastMessage(message) {
+        const renderId = this.state.renderId + 1;
+        const data = {
+            data: message,
+            id: renderId
+        };
+
+        NetworkManager.broadcastData(data);
+
+        this.setState({
+            renderId,
+            canvasState: message
+        });
     }
 
     render() {
@@ -51,6 +94,10 @@ export default class App extends React.Component {
                 {...this.state}
                 registerUser={this.registerUser} />);
         }
-        return 'canvas';
+        return (
+            <Canvas
+                {...this.state}
+                broadcastMessage={this.broadcastMessage} />
+        );
     }
 }
