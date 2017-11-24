@@ -1,4 +1,8 @@
 import React from 'react';
+import Cookie from 'js-cookie';
+
+import NetworkManager from 'network/NetworkManager';
+
 import Background from './Background';
 
 export default class Login extends React.Component {
@@ -6,11 +10,21 @@ export default class Login extends React.Component {
         super(props);
 
         this.state = {
-            username: ''
+            username: '',
+            error: ''
         };
 
         this.submitForm = this.submitForm.bind(this);
         this.changedName = this.changedName.bind(this);
+    }
+
+    componentDidMount() {
+        const previousName = Cookie.get('potato_username');
+        if (previousName) {
+            this.setState({
+                username: previousName
+            });
+        }
     }
 
     changedName(e) {
@@ -33,6 +47,29 @@ export default class Login extends React.Component {
             // no user name provided
             return;
         }
+
+        // check if username exists in Firebase
+        if (NetworkManager.activeUsers[this.state.username]) {
+            // the user currently exists
+            const matchedUser = NetworkManager.activeUsers[this.state.username];
+            const now = Date.now();
+            if (now - matchedUser.alive <= 30000) {
+                this.setState({
+                    error: `${this.state.username} is an active user. If you were disconnected and are returning, wait 30 seconds for your session to invalidate before trying again.`
+                });
+                return;
+            }
+        }
+
+        if (this.state.error !== '') {
+            this.setState({
+                error: ''
+            });
+        }
+
+        Cookie.set('potato_username', this.state.username, {
+            expires: 365
+        });
 
         this.props.registerUser(this.state.username);   
     }
@@ -69,6 +106,9 @@ export default class Login extends React.Component {
                                 </button>
                             </div>
                         </form>
+                        <div className="error">
+                            {this.state.error}
+                        </div>
                     </div>
                 </div>
                 <div className="attribution">

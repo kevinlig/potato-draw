@@ -37,6 +37,7 @@
     "babel-preset-react": "^6.24.1",
     "fabric": "^1.7.20",
     "firebase": "^4.6.2",
+    "js-cookie": "^2.2.0",
     "lodash": "^4.17.4",
     "mousetrap": "^1.6.1",
     "react": "^16.1.1",
