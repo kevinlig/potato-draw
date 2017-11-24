@@ -72,7 +72,7 @@ module.exports = {
             root: path.resolve(__dirname)
         }),
         new ExtractTextPlugin({
-            filename: 'css/style.css',
+            filename: 'css/style.[hash].css',
             allChunks: true
         }),
         new HtmlWebpackPlugin({
