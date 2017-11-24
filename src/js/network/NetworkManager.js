@@ -3,11 +3,17 @@ const firebase = require('firebase/app');
 require('firebase/database');
 
 import firebaseConfig from '../../../firebaseConfig';
+import turnConfig from '../../../turnConfig';
 
 const connectionServers = {
     iceServers: [
         {
             urls: 'stun:stun.l.google.com:19302'
+        },
+        {
+            urls: turnConfig.url,
+            username: turnConfig.username,
+            credential: turnConfig.password
         }
     ]
 };
@@ -16,6 +22,7 @@ class NetworkManager {
     constructor() {
         this.user = null;
         this.cleanedUp = false;
+        this.initializedData = false;
         this.activeUsers = {};
 
         this.connections = {};
@@ -51,7 +58,7 @@ class NetworkManager {
                 // user pinged a heartbeat in the last 30 seconds
                 livingUsers[username] = user;
             }
-            else if (this.connections[username]) {
+            else if (now - user.alive > 30000 && this.connections[username]) {
                 // the user is offline but there was a previous connection to them, remove it
                 this.connections[username].destroy();
             }
@@ -131,6 +138,7 @@ class NetworkManager {
                 }
                 continue;
             }
+            console.log(`initiate with ${username}`);
 
             this.connectToUser(username);
         }
@@ -144,29 +152,56 @@ class NetworkManager {
     createPeerConnection(username, initiator = false) {
         const peerConnection = new SimplePeer({
             initiator,
+            reconnectTimer: 3000,
             config: connectionServers
         });
 
         peerConnection.on('signal', (response) => {
+            // received signal from user
             this.sendSignalToRecipient(username, response);
         });
 
         peerConnection.on('connect', () => {
+            // connected to user
             if (this.appRef) {
                 this.appRef.connectedToPeer(username);
+                // remove the signal row from the DB
+                this.database.ref(`/users/${this.user.name}/signals/${username}`).remove();
+            }
+            if (!this.initializedData) {
+                // ask for the current data state up to this point
+                this.initializedData = true;
+                this.requestInitialDataset();
             }
         });
         
-        peerConnection.on('data', (data) => {
+        peerConnection.on('data', (raw) => {
+            // received data
+            const data = JSON.parse(raw);
+            if (data.type) {
+                // this is a special request
+                if (data.type === 'initialRequest') {
+                    // the user is requesting an initial data dump
+                    this.provideInitialDataset(username);
+                }
+                else if (data.type === 'initialData') {
+                    // the user is responding with the initial data dump
+                    this.receiveInitialDataSet(data);
+                }
+                return;
+            }
             if (this.appRef) {
-                this.appRef.receivedMessage(username, JSON.parse(data));
+                this.appRef.receivedMessage(username, data);
             }
         });
 
         peerConnection.on('close', () => {
+            // user disconnected
             if (this.connections[username]) {
                 // remoe the connection from our connection list
                 delete this.connections[username];
+                // remove the signal row from the DB
+                this.database.ref(`/users/${this.user.name}/signals/${username}`).remove();
             }
             if (this.appRef) {
                 this.appRef.disconnectedFromPeer(username);
@@ -181,7 +216,6 @@ class NetworkManager {
     }
 
     sendSignalToRecipient(recipient, signal) {
-        console.log(`sending to ${recipient}`);
         this.database.ref(`/users/${recipient}/signals/${this.user.name}`).set(JSON.stringify(signal));
     }
 
@@ -191,7 +225,7 @@ class NetworkManager {
 
             for (const username in signals) {
                 const signal = JSON.parse(signals[username]);
-                if (this.connections[username]) {
+                if (this.connections[username] && !this.connections[username].connected) {
                     // this is a response to a pending outbound connection, complete it
                     this.completeOutboundConnection(username, signal);
                 }
@@ -208,6 +242,36 @@ class NetworkManager {
         this.connections[username] = inboundConnection;
         // injest the signal
         inboundConnection.signal(signal);
+    }
+
+    requestInitialDataset() {
+        const users = Object.keys(this.connections);
+        if (users.length === 0) {
+            // you are the first user, don't do anything
+            return;
+        }
+        // pick a user
+        const user = users[0];
+        // ask them for their current data
+        this.sendData(user, {
+            type: 'initialRequest'
+        });
+    }
+
+    provideInitialDataset(recipient) {
+        if (this.appRef) {
+            const data = this.appRef.generateCurrentState();
+            this.sendData(recipient, {
+                data,
+                type: 'initialData'
+            });
+        }
+    }
+
+    receiveInitialDataSet(data) {
+        if (this.appRef) {
+            this.appRef.populateState(data.data);
+        }
     }
 
     sendData(recipient, data) {

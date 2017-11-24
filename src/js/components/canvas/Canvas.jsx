@@ -10,7 +10,6 @@ export default class Canvas extends React.Component {
         super(props);
 
         this.state = {
-            render: '',
             color: '#424242'
         };
 

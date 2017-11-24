@@ -26,6 +26,7 @@ export default class Connections extends React.Component {
                                 title="Connected users"
                                 position="top"
                                 trigger="mouseenter"
+                                theme="potato"
                                 arrow>
                                 <div className="ion-wifi" />
                             </Tooltip>

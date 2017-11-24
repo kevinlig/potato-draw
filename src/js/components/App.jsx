@@ -88,6 +88,24 @@ export default class App extends React.Component {
         });
     }
 
+    generateCurrentState() {
+        return {
+            renderId: this.state.renderId,
+            canvas: this.state.canvasState
+        };
+    }
+
+    populateState(data) {
+        if (data.renderId < this.state.renderId) {
+            // do not use the inbound state if the render ID is behind the local render ID
+            return;
+        }
+        this.setState({
+            renderId: data.renderId,
+            canvasState: data.canvas
+        });
+    }
+
     render() {
         if (this.state.activeScreen === 'login') {
             return (<Login

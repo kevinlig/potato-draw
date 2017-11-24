@@ -8,6 +8,7 @@ const ConnectionItem = (props) => (
                 title={props.peer}
                 position="top"
                 trigger="mouseenter"
+                theme="potato"
                 arrow>
                 <div className="ion-person" />
             </Tooltip>

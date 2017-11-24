@@ -90,6 +90,9 @@
     }
 }
 
-.tippy-toolip {
+// tooltip
+.tippy-tooltip.potato-theme {
     @include headerStyle;
+    text-transform: uppercase;
+    font-size: 12px;
 }
