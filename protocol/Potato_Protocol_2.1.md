@@ -22,7 +22,7 @@ However, due to network conditions, some clients may disconnect from each other 
 
 Communication under this condition is less straight-forward as transmitting to each peer does not guarantee that data will reach all clients in the mesh. Furthermore, clients do not know who all the clients in the mesh are.
 
-Potato Protocol 2.1 between all clients, even in this second condition.
+Potato Protocol 2.1 aims to facilitate communication between all clients, even in this second condition.
 
 Note: In some cases, a client may lose connection with _all_ its peers. At this point, we will consider the client to no longer be part of the mesh as it is no longer reachable.
 
@@ -360,3 +360,6 @@ YES (2.5 votes), NO (1 vote) - YES wins
 If a client wins a direct election with a YES vote, it may broadcast its latest frame to all the clients in the mesh.
 
 When a frame broadcast occurs, **all active elections must terminate without resolution**. All clients, regardless of how they voted, must accept the broadcast frame and update their current frame identifier to the new frame.
+
+### Conclusion
+With this combination of direct and indirect elections, clients in the mesh are able to reach a consensus without direct connections with each other or even being aware of the full mesh population.
