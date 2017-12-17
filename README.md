@@ -2,6 +2,8 @@
 
 A collaborative drawing/annotation tool built on Firebase
 
+**PROPOSAL:** [Read the proposal for Potato Protocol 2.1 for improved mesh communication and syncing](https://github.com/kevinlig/potato-draw/blob/master/protocol/Potato_Protocol_2.1.md).
+
 ## Installing
 
 To install:
