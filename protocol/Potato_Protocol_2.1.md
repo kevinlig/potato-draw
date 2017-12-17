@@ -181,7 +181,7 @@ If B's indirect election request arrives at D before C's request does, D would s
 
 Moments later, C's indirect election request arrives at D. D should check the `parent` and `next` values to determine that this is the same pairing as B's request. The client should respond with an abstain vote.
 
-E is a peer of both C and E, so it is possible E will receive multiple indirect election requests. When a client receives multiple indirect election requests with the same `parent` and `next` values, it should respond to only the first request and abstain from the subsequent ones.
+E is a peer of both C and D, so it is possible E will receive multiple indirect election requests. When a client receives multiple indirect election requests with the same `parent` and `next` values, it should respond to only the first request and abstain from the subsequent ones.
 
 ### Election Request Logic
 
