@@ -2,6 +2,36 @@
 
 PROPOSAL
 
+## Contents
+
+* [Purpose](#purpose)
+* [Terminology](#terminology)
+* [Mesh Conditions](#mesh-conditions)
+* [Messages](#messages)
+	* [Schema](#schema)
+	* [Direct Messages](#direct-messages)
+	* [Broadcast Messages](#broadcast-messages)
+	* [Election Messages](#election-messages)
+	* [Avoiding Loops](#avoiding-loops) 
+* [Elections](#elections)
+	* [Direct Elections](#direct-elections)
+	* [Indirect Elections](#indirect-elections)
+	* [Election Request Logic](#election-request-logic)
+	* [Election Voting Logic](#election-voting-logic)
+	* [Abstaining](#abstaining)
+	* [Election Duration](#election-duration)
+	* [Indirect and Direct Election Response](#indirect-and-direct-election-response)
+	* [Election Outcomes](#election-outcomes)
+	* [Example](#example)
+	* [Conclusion](#conclusion)
+
+
+## Purpose
+
+Potato Protocol 2.1 aims to address two problems: transmitting data across a peer-to-peer connected mesh where all clients are not aware of each other and synchronizing changes across the mesh.
+
+Potato Protocol 2.1 uses two approaches to achieve these results: a direct/broadcast messaging system that utilizes clients to relay messages to its destination and an election system that is able to gather consensus from all clients in a mesh without needing to determine who all the clients are first.
+
 ## Terminology
 
 * `client` - An active user running an instance of the Potato application. Each unique user may run only one instance at a time.
@@ -57,7 +87,7 @@ Messages must adhere to the following schema:
 * `visited` - An array of client string names that the message has been relayed through already.
 * `body` - A JSON-serializable object that contains the message's content.
 
-#### Direct Messages
+### Direct Messages
 **Direct messages** (`type` of `direct`) should be ignored (other than any parsing/processing required to relay for delivery to the destination) by any other client not specified in the `to` field. Direct messages **must** include a `to` field.
 
 During initial transmission from the originating client, the originating client should check if any of its peers is the recipient client. If so, it should transmit the message solely to that peer.
@@ -70,7 +100,7 @@ To prevent unnecessarily large message caches, each client may clear its cache a
 
 This process should continue until the message reaches its recipient client or all connected clients in the mesh have touched the message (the message is undeliverable in this case).
 
-#### Broadcast Messages
+### Broadcast Messages
 
 A **broadcast message** (`type` of `broadcast`) should be parsed by every client in the mesh, then relayed on to other clients to ensure that the full population receives the message.
 
@@ -84,7 +114,10 @@ If a client receives a message with an `identifier` that already appears in its 
 
 Eventually, the message will reach all connected clients by reaching clients with either no peers or whose peers have already received the message.
 
-##### Avoiding Loops
+### Election Messages
+Refer to the [Elections section](#elections) for details on the election process.
+
+### Avoiding Loops
 
 ![Avoiding loops](img/broadcast_avoid_loop.png)
 
@@ -102,9 +135,6 @@ Some possible outcomes are shown below (grayed-out dashed lines depict peer conn
 
 Note that the rightmost outcome is possible due to the network conditions: for example, if network latency delays E's transmission to D so it arrives after G's transmission.
 
-#### Election Messages
-Refer to the Elections section for details on the election process.
-
 ## Elections
 A key requirement of the Potato Protocol is to be able to synchronize canvas frames across all clients in the mesh. The Potato Protocol utilizes an **election process** in which all clients in the mesh vote whether or not to accept a new frame.
 
@@ -118,7 +148,7 @@ The election process may seem similar to blockchains, however there are critical
 If this election process was applied to a system of government, it would be considered a "weak democracy" at best due to the lack of internal enforcement of election results. However, the author believes that this system will ensure synchronized client state *over time* with minimal overhead, at the expense of synchronized state at *every moment in time*. Given the relative unimportance of the data being transmitted as well as the potential for high frequency changes, increasing overhead to improve state management would appear to be undesirable.
 
 ### Direct Elections
-When a client (the originating client) desires to update the mesh to its current canvas state, it will initiate an election.
+When a client (the originating client) desires to update the mesh to its current canvas state, it will initiate a **direct election**.
 
 To initiate an election, the client will transmit a message to its directly connected peers with a `type` value of `direct_election_request`.
 
@@ -199,6 +229,12 @@ There is **no** time limit on direct elections. However, no client can request m
 When a client responds to an election request, it should use a message `type` of either `indirect_election_response` or `direct_election_response`, depending on the initial request type.
 
 Its `body` should contain a `vote` key with `YES`, `NO`, or `ABSTAIN` as string values, as well as the original `parent` and `next` key-values.
+
+### Election Outcomes
+
+If a client wins a direct election with a YES vote, it may broadcast its latest frame to all the clients in the mesh.
+
+When a frame broadcast occurs, **all active elections must terminate without resolution**. All clients, regardless of how they voted, must accept the broadcast frame and update their current frame identifier to the new frame.
 
 ### Example
 
@@ -355,11 +391,6 @@ Because this is a direct election, the originator (A) must vote for itself with 
 * C - NO (1 vote)
 
 YES (2.5 votes), NO (1 vote) - YES wins
-
-### Election Outcomes
-If a client wins a direct election with a YES vote, it may broadcast its latest frame to all the clients in the mesh.
-
-When a frame broadcast occurs, **all active elections must terminate without resolution**. All clients, regardless of how they voted, must accept the broadcast frame and update their current frame identifier to the new frame.
 
 ### Conclusion
 With this combination of direct and indirect elections, clients in the mesh are able to reach a consensus without direct connections with each other or even being aware of the full mesh population.
