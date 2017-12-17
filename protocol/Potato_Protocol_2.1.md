@@ -23,6 +23,7 @@ PROPOSAL
 	* [Indirect and Direct Election Response](#indirect-and-direct-election-response)
 	* [Election Outcomes](#election-outcomes)
 	* [Example](#example)
+	* [Systemic Bias](#systemic-bias)
 	* [Conclusion](#conclusion)
 
 
@@ -161,13 +162,14 @@ In the `body` of the message, the client must include the following key-value pa
 	* A random string value.
 	* These values should be concatenated together with `-` symbols between them, but not preceding or following, in the above order: `time-name-random`.
 * `originator` - The client's name.
+* `direct_participants` - An array of the string names of the clients that the originator is sending direct election requests to.
 
 In an ideal mesh, the originating client would have a direct peer connection to all the clients in the mesh and would be able to simply wait for their votes and complete the election. However, we need to account for non-ideal conditions in which not all clients are directly connected to each other. To handle this, we need to employ indirect elections.
 
 ### Indirect Elections
 Because the originating client may not have a direct connection to all clients in the mesh, we cannot rely exclusively on direct elections. This is because the originating client doesn't know *who* all the clients are in the mesh - it only knows about its peers. To maintain synchronicity across the the mesh, we must allow all clients to vote, but without a full client roster, the originator neither knows when all the votes are in nor how to calculate percentages to determine a result.
 
-**Indirect elections** attempt to resolve this issue by way of representative voting. After an originating client sends a direct election request to each of its peers, those peers send a message with a `type` of `indirect_election_request` to each of their peers (excluding the originator).
+**Indirect elections** attempt to resolve this issue by way of proxy voting. After an originating client sends a direct election request to each of its peers, those peers send a message with a `type` of `indirect_election_request` to each of their peers (excluding the originator).
 
 The message should include the same `body` as the direct election request.
 
@@ -177,23 +179,25 @@ Each of the peers that receive an indirect election request should, in turn, cre
 
 In the above diagram, A is the originating client. It sends direct election requests to B and C. D is a peer of both B and C, but not of A, so both B and C would send indirect election requests to D.
 
-If B's indirect election request arrives at D before C's request does, D would send an indirect election request to all of its peers: C, E, F, and G. It does not send a request to B because B was the party that initiated its own indirect election request with D. D *does* send a request to C because D has no way of knowing that C is already involved in a direct election.
+If B's indirect election request arrives at D before C's request does, D would send an indirect election request to all of its peers who are not direct election participants: E, F, and G. It does not send a request to B because B was the party that initiated its own indirect election request with D. D also *does not* send a request to C because D can see that C is in the `direct_participants` array.
 
-Moments later, C's indirect election request arrives at D. D should check the `parent` and `next` values to determine that this is the same pairing as B's request. The client should respond with an abstain vote.
+Moments later, C's indirect election request arrives at D. D should check the `parent` and `next` values to determine that this is the same pairing as B's request. D should respond to C with an abstain vote.
 
-E is a peer of both C and D, so it is possible E will receive multiple indirect election requests. When a client receives multiple indirect election requests with the same `parent` and `next` values, it should respond to only the first request and abstain from the subsequent ones.
+The opposite would be true if C's request arrived at D before B's request.
+
+Likewise, client E is a peer of both C and D, so it is possible E will receive multiple indirect election requests. When a client receives multiple indirect election requests with the same `parent` and `next` values, it should respond to only the first request and abstain from the subsequent ones.
 
 ### Election Request Logic
 
 * An originating client that wants to make a change sends direct election requests to all of its direct peers.
-* Any client that receives a direct election request sends indirect election requests to all of its peers, excluding the originating client.
+* Any client that receives a direct election request sends indirect election requests to all of its peers, excluding the originating client and any clients appearing in the `direct_participants` array.
 * Any client that receives an indirect election request sends its own indirect election request to all of its peers except:
-	* If a peer is also the originating client, they do not receive an indirect election request.
-	* If a peer is the party that sent the client its indirect election request, it does not receive a request.
+	* If a peer is also the originating client, they must not be sent an indirect election request.
+	* If a peer is the party that sent the client its indirect election request, it must not be sent an indirect election request.
+	* If a peer is in the `direct_participants` array, it must not be sent an indirect election request.
 * If a client receives an indirect election request from a peer that the client has already sent a request with an identical `parent` and `next` value to, the client should respond with an ABSTAIN.
 * If a client receives multiple indirect election requests with the same `parent` and `next` values, it should respond with ABSTAIN to all requests except for the first one.
-	* However, if a client receives both a direct election request and an indirect election request with the same `parent` and `next` values, the client can respond to both the direct election request and the *first* indirect election request.
-
+* Each client may only vote **in one** direct or indirect election for each set of unique `parent` and `next` values. A client **may not** vote in both a direct and indirect election for a unique set of `parent` and `next` values.
 
 ### Election Voting Logic
 A client should vote according the following criteria:
@@ -202,27 +206,36 @@ A client should vote according the following criteria:
 * NO if the `parent` hash does not match the client's current frame identifier
 * NO if the `parent` hash matches the client's current frame identifier, but it has **already voted** for a different `next` hash with the same `parent` identifier.
 
-If a client has sent indirect election requests itself, it must wait either 300ms or for all the peers to respond with votes/abstains. It should tally all the votes with a weight of 1 vote per non-abstain. It should then add its own vote to the tally with a weight of 1.5. If there are more votes for YES, then YES wins. If there are more votes for NO, then NO wins.
+The client should determine how it will vote (its **internal vote**) *immediately* upon receiving a direct or indirect election request.
 
-Clients get a 1.5 vote weighting in their own elections to avoid any possibility of ties. For example, consider a situation where there are 3 peers, two of which respond with NO and one with YES. If the client votes YES, it creates a tie. But with a weighting of 1.5, it becomes 2 NO, 2.5 YES. While this may be somewhat arbitrary and unfair, it avoids the ambiguity of ties.
+After it has determined its internal vote, it should send out any applicable indirect election requests to its peers.
 
-If a client did not send any indirect election requests, it can determine YES or NO solely using the logic in the above list.
+However, the client must wait for all the peers to respond with votes/abstains before transmitting its response to the requesting client.
 
-A single YES or NO value should then be passed up to the parent client that sent the original election request.
+The client should tally all its received non-abstain votes, making sure to include its own vote with equal weight (1 vote per client). Since a client's peers may be responding with the results of their own indirect elections, the client's results will be an aggregate of any downstream elections.
 
 #### Direct Election-Specific Logic
 
-In direct elections, the originating client's vote weight remains 1.5, however it must always vote YES for itself.
+In direct elections, the originating client receives the aggregated results from each of its directly connected peers. The originating client performs the final vote tally by combining all the results it receives. The originating client also gets to vote, however it **must always** vote YES in its own direct election. In order to ensure that a tie never occurs, the originating client's vote is weighted at 1.5 votes.
 
-If an originating client receives a direct or indirect election request for a *different* `next` value than its own proposal, it must always vote NO.
+If an originating client receives a direct or indirect election request while it has an open election in progress (in other words an election request for a different `parent`/`next` value pair), it **must always** vote NO (with a standard vote weight of 1).
 
 ### Abstaining
-When a client receives an abstaining vote, it should exclude the count of those abstaining peers from the total (10 requests go out, 6 vote YES, 2 vote NO, 2 abstained - YES wins with 75% of the vote).
+When a client receives an abstaining vote, it should exclude the count of those abstaining peers from the total (10 requests go out, 6 vote YES, 2 vote NO, 2 abstained - the client should only report 6 YES and 2 NO, discarding the abstained responses).
+
+If a peer is determined to have disconnected before responding to an election request, the requesting client should treat it as an ABSTAIN vote.
 
 ### Election Duration
-An indirect election **must** terminate within 300ms. If there are peers who have not responded after 300ms of the request, those peers are considered to have abstained.
 
-There is **no** time limit on direct elections. However, no client can request more than one direct election at a time. If the originating client's desired changes update while an election is ongoing, it does not need to do anything - if it wins the election, it can simply broadcast the most up-to-date frame.
+Direct elections participants **must** respond within 300ms even if their indirect elections have not completed yet. If a direct election participant's indirect elections have not completed within 300ms, the participant should treat outstanding requests as ABSTAIN votes and respond with its internal votes plus any responses it has already received.
+
+If the originating client does not receive a response from a direct participant within 300ms, it should treat that participant as an ABSTAIN vote.
+
+These measures are necessary to prevent dropped/disconnected clients from stalling the entire mesh's synchronization process.
+ 
+No client can request more than one direct election at a time. If the originating client's desired changes update while an election is ongoing, it does not need to do anything - if it wins the election, it can simply broadcast the most up-to-date frame.
+
+There is, however, an advantage to finishing first. When an originating client wins an election with a YES result, it may broadcast its next frame, which cancels any other in-progress election. Additionally, clients must vote NO in any election whose `parent` value they have already cast a YES or NO for previously.
 
 ### Indirect and Direct Election Response
 
@@ -242,155 +255,160 @@ When a frame broadcast occurs, **all active elections must terminate without res
 
 Consider the above situation: A is the originating client, it sends direct election requests to B and C.
 
-C, D, E, and G all have multiple peers, so they will both receive indirect election requests as well as make their own indirect election requests.
+Upon receiving a direct election request, both B and C immediately evaluate their internal voting logic to determine their internal vote. Let's say that B votes YES and C votes NO.
 
-F has only one peer, which is not the originating client, so it will only receive indirect election requests.
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES |  |
+| C | Internal: 1 NO | |
 
 ![First step](img/indirect_example_01.png)
 
-Let us assume that D receives its indirect election request from B before it receives anything from C, E, or G. It will send indirect election requests to C, E, F, and G.
+Next both B and C will prepare and transmit their indirect election requests.
 
-Moments later, D receives its request from C with the same `parent` and `next` values that D has already received. Because D has already sent its own request to C and because D has already seen a request with these values, D should respond that it will abstain from C's request.
+C, D, E, and G all have multiple peers, so they may both receive indirect election requests and make their own indirect election requests.
+
+F has only one peer, which is not the originating client, so it will only receive indirect election requests.
 
 ![Second step](img/indirect_example_02.png)
 
-A similar thing will happen with E: if it receives D's request before C, it should respond to C that it is abstaining. If it receives C's request first, it should abstain from D.
+Let us assume that D receives its indirect election request from B before it receives anything from C, E, or G. Upon receiving the request, D will immediately evaluate its internal voting logic to determine its internal vote. Let's say that D decides to vote YES.
 
-Let's say E gets C's request first. The current state of the election is:
-
-| Client | Responses | Outcome |
+| Client | Responses | Response |
 | --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: Pending, F: Pending, G: Pending | Pending |
-
-Since F does not have any peers it can send a request to, F can determine its vote using pure logic. Let's say it votes NO.
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: Pending | |
+| D | Internal: 1 YES | |
 
 ![Third step](img/indirect_example_03.png)
 
-The new state is:
+D will now send indirect election requests to E, F, and G because those are its peers. D will not send anything to B because B is the source of D's request. D will also not send anything to C because C appears in the `direct_participants` array in the request `body`.
 
-| Client | Responses | Outcome |
-| --- | --- | --- | 
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: Pending, F: NO, G: Pending | Pending |
+Moments later, D receives its request from C with the same `parent` and `next` values that D has already received. D evaluates the request and determines that it has already voted in a request with the same `parent` and `next` values so it responds to C that it will ABSTAIN from C's request.
 
-When E receives a request from C, it has two peers it can send requests to: D and G. There is a moment in time for E before it receives D's request (which it will abstain from). During this time, E will send D its own request (since D is a peer E hasn't heard from yet).
-
-| Client | Responses | Outcome |
+| Client | Responses | Response |
 | --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: Pending, F: NO, G: Pending | Pending |
-| E | D: Pending, G: Pending | Pending |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN | |
+| D | Internal: 1 YES, E: Pending, F: Pending, G: Pending | |
 
-We can potentially run into a loop here, where both D and E simultaneously send requests to each other.
-
-If D receives E's request before D has sent its own request, D should not send any requests to E:
-
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, F: NO, G: Pending | Pending |
-| E | D: Pending, G: Pending | Pending |
-
-If D receives E's request after D has sent its own request to E, D should respond with an ABSTAIN (let's say this is what happens):
-
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: Pending, F: NO, G: Pending | Pending |
-| E | D: ABSTAIN, G: Pending | Pending |
-
-E should also respond with an ABSTAIN to D, because D's `parent` and `next` values are identical to C's request.
-
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: ABSTAIN, F: NO, G: Pending | Pending |
-| E | D: ABSTAIN, G: Pending | Pending |
-
-
-The current diagram looks as such:
+Since F does not have any peers it does not need to wait for any additional responses before responding with its internal vote. Let's say it votes NO and responds to D with that.
 
 ![Fourth step](img/indirect_example_04.png)
 
-* F has responded with NO.
-* E is no longer expecting a response from D (because D has responded with an ABSTAIN)
-* C is no longer expecting a response from D (because D has responded with an ABSTAIN)
-* D is no longer expecting a response from E (because E has responded with an ABSTAIN)
+The new state is:
 
-G will also receive two requests: one from D and one from E. If G receives E's request before D's request, G will send its own request to D, who will respond to G with an ABSTAIN.
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN | |
+| D | Internal: 1 YES, E: Pending, F: 0 YES 1 NO, G: Pending | |
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
 
-If G receives D's request before E, it will send a request to E, who should ABSTAIN from G. Let's say this is what happens. Once E abstains from G's request, G has no more peers to send requests to, so it can internally evaluate its voting logic.
+Let's take a look at Client E now.
 
-Assume that G receives D's request before E. Let's also say G internally votes YES.
+E is a peer of both C and D so it may receive indirect election requests from both C and D.
 
-![Fifth step](img/indirect_example_05.png)
+If E receives an indirect election request from D before it receives one from C, it will vote and respond to D's request while abstaining from C's request.
 
-Since G has abstained from E, E has no more peers it is waiting on (both D and G have abstained and C is its originator). As such, it can evaluate its voting logic internally. Let's say it votes YES.
+However, let's assume that E receives C's request before it receives D's request. Upon receiving the request, E evaluates its internal voting logic to determine its internal vote - YES.
+
+![Possible fifth steps](img/indirect_example_05.png)
+
+As shown in the diagram above, D and E are peers of each other. What happens next depends entirely on the order that C, D and E send and receive their requests.
+
+* If E receives C's request before it receives a request from D, it will send an indirect election request to D (and also G).
+	* If D receives E's request before it receives B's request, it will ABSTAIN from B's request and vote in E's election.
+	* If D receives E's request after it receives B's request, it will may have already sent out a request to E. E should respond to D with ABSTAIN and D should also respond to E's request with an ABSTAIN. This avoids a loop of request/responses.
+	* If D receives E's request after it receives B's request, but before it has sent out any requests of its own, D should not send E any requests, but D should respond to E's request with an ABSTAIN.
+* If E receives C's request before it receives D's request *but* it receives D's request before it can send anything to D, it should respond to D with an ABSTAIN message, but not send D any further requests.
+* If E receives C's request after it receives a request from D, it will send an indirect election request to G only because C is in the `direct_participants` array. E will respond to C with an ABSTAIN message.
+
+For this example, let's say that E receives C's request, then receives another request from D. E should send a request to G and an ABSTAIN from D.
+
+![Fifth step](img/indirect_example_05a.png)
+
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN, E: Pending | |
+| D | Internal: 1 YES, E: ABSTAIN, F: 0 YES 1 NO, G: Pending | |
+| E | Internal: 1 YES, G: Pending | |
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+
+
+Since G is a peer of both D and E, it may receive requests from both. G should respond with its vote to the first request it receives and it should ABSTAIN from subsequent requests.
+
+Let's say that G receives D's request first. Upon receipt, G immediately evaluates its internal logic to determine how it will vote. Let's say it votes NO. 
 
 ![Sixth step](img/indirect_example_06.png)
 
-The current state is:
+Since E is a peer of G's, G may send a request to E if it has not received E's request yet. E, which at this point has already received a request from C, will respond to G with ABSTAIN. Additionally, G, whenever it does receive E's request, will respond to E with ABSTAIN.
 
-| Client | Responses | Outcome |
+Once G receives E's ABSTAIN response to G's request, it will respond to D with its vote, since all its peers will have responded at that point.
+
+| Client | Responses | Response |
 | --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: Pending | Pending |
-| D | C: Pending, E: ABSTAIN, F: NO, G: YES | Pending |
-| E | D: ABSTAIN, G: ABSTAIN, Internal: YES | YES (1.5-0) |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN, E: Pending | |
+| D | Internal: 1 YES, E: ABSTAIN, F: 0 YES 1 NO, G: - YES, 1 NO | |
+| E | Internal: 1 YES, G: Pending | |
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+| G | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
 
-With E having made a decision, it can pass this vote up to C's open request.
+D will now have received responses from both F and G, as well as an ABSTAIN from E. This means all of its peers have responded, so it can send its own response to B.
 
-For C, its only open request is in E, which has responded with a YES. C should now use its internal logic to determine its own vote (let's say it votes NO). With 1 vote from E for YES, and 1.5 votes (the client gets a weight of 1.5) for NO, there are more NO votes, so C votes NO.
+D will add up the YES and NO votes it has received from its peers and include its own vote. It has received 1 NO from F and 1 NO from G. Its internal vote is YES, so it will respond with 1 YES, 2 NO.
+
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN, E: Pending | |
+| D | Internal: 1 YES, E: ABSTAIN, F: 0 YES 1 NO, G: 0 YES, 1 NO | 1 YES, 2 NO (sent to B)|
+| E | Internal: 1 YES, G: Pending | |
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+| G | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+
+Meanwhile, G has notified E that it is abstaining (since it voted in D's election). This means that E has heard from all its peers (G responded, D sent it a discarded indirect election request request), so it can tally its results and respond to C.
+
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES, D: Pending |  |
+| C | Internal: 1 NO, D: ABSTAIN, E: Pending | |
+| D | Internal: 1 YES, E: ABSTAIN, F: 0 YES 1 NO, G: 0 YES, 1 NO | 1 YES, 2 NO (sent to B)|
+| E | Internal: 1 YES, G: ABSTAIN | 1 YES, 0 NO (sent to C)|
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+| G | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+
+Both C and B have received responses from all their peers at this point, so they can perform their tallies:
+
+| Client | Responses | Response |
+| --- | --- | --- |
+| B | Internal: 1 YES, D: 1 YES, 2 NO | 2 YES, 2 NO (sent to A)  |
+| C | Internal: 1 NO, D: ABSTAIN, E: 1 YES 0 NO | 1 YES, 1 NO (sent to A) |
+| D | Internal: 1 YES, E: ABSTAIN, F: 0 YES 1 NO, G: 0 YES, 1 NO | 1 YES, 2 NO (sent to B)|
+| E | Internal: 1 YES, G: ABSTAIN | 1 YES, 0 NO (sent to C)|
+| F | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+| G | Internal: 1 NO | 0 YES, 1 NO (sent to D) |
+
+At this point, A receives its final votes from all of its direct election participants (B and C). A tallies the results: 3 YES, 3 NO (2 YES from B + 1 YES from C, 2 NO from B + 1 NO from C).
+
+As the originating client, A is required to cast 1.5 votes as YES. As such, the vote counts are:
 
 ![Seventh step](img/indirect_example_07.png)
 
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: YES, Internal: NO| NO (1-1.5)|
-| D | C: NO, E: ABSTAIN, F: NO, G: YES | Pending |
-| E | D: ABSTAIN, G: ABSTAIN, Internal: YES | YES (1.5-0) |
+YES (4.5 votes), NO (3 votes) - YES wins
 
-At this point, C can respond to D with its vote of NO. D has 1 vote for YES (G) and 2 votes for NO (C, F). D will now run its internal logic to determine how it wants to vote - YES. Since D's internal logic gets a weight of 1.5, it is 2.5 votes for YES, 2 to NO, so YES wins in D.
+### Systemic Bias
+The Election system is designed to reward originating clients with more direct connections. Because the Election system is essentially a bottom-up tree traversal, originating clients with more direct connections will have more parallel indirect elections of shorter durations. This means they are more likely to both finish their election process first as well as benefit from the "first touch" voter advantage. The "first touch" voter advantage is the rule that clients must vote NO in any election whose `parent` value they have already seen in the current frame cycle. Thus, it is advantageous to hit as many clients as early as possible since it denies competing proposals a YES vote.
 
-![Eighth step](img/indirect_example_08.png)
+This bias is intentional because clients with more direct connections are more likely to stay up-to-date than clients on the edges of the mesh.
 
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: Pending | Pending |
-| C | D: ABSTAIN, E: YES, Internal: NO| NO (1-1.5) |
-| D | C: NO, E: ABSTAIN, F: NO, G: YES, Internal: YES | YES (2.5-2) |
-| E | D: ABSTAIN, G: ABSTAIN, Internal: YES | YES (1.5-0)|
+This advantage only reveals itself when there are multiple clients proposing updates simultaneously or within a short period of time. Because this indicates a period of high frequency updates, it is important to prioritize better networked clients over edge clients because better networked clients will be able to more quickly receive subsequent updates, and in turn continue to contribute, while edge clients have a higher likelihood of lagging behind.
 
-Now that D has declared for YES, it can respond to B. B perform its own internal logic and also votes for YES - with 2.5 votes for YES and 0 for NO, B declares for YES.
+When the frequency of updates decreases, edge clients have more equitable access for proposing updates. In these conditions, the Election system acts as a verification tool to ensure that the updating client is proposing an update based on a frame that the majority of clients use (versus lagging behind or being too far ahead).
 
-![Ninth step](img/indirect_example_09.png)
-
-| Client | Responses | Outcome |
-| --- | --- | --- |
-| B | D: YES, Internal: YES | YES (2.5-0) |
-| C | D: ABSTAIN, E: YES, Internal: NO| NO (1-1.5) |
-| D | C: NO, E: ABSTAIN, F: NO, G: YES, Internal: YES | YES (2.5-2) |
-| E | D: ABSTAIN, G: ABSTAIN, Internal: YES | YES (1.5-0)|
-
-Finally, the direct election can be voted on. B will vote for YES while C will vote for NO.
-
-Because this is a direct election, the originator (A) must vote for itself with a weight of 1.5, so YES wins with 2.5 votes to 1 vote for NO.
-
-![Tenth step](img/indirect_example_10.png)
-
-* A - YES (1.5 votes)
-* B - YES (1 vote)
-* C - NO (1 vote)
-
-YES (2.5 votes), NO (1 vote) - YES wins
+The biggest weakness in this system is dealing with network disconnects. While known disconnect events should be treated as ABSTAIN votes, undetected disconnects have the potential to lock up the entire election process. As such, a 300ms timeout is proposed, at which point any pending request is treated as a vote for ABSTAIN. However, this has the disadvantage of diminishing the network advantage described above. The hope is that by keeping the mesh synchronization process moving forward, unexpected behaviors resulting from disconnects/lost responses will be diminished over time as subsequent frame updates overwrite these changes.
 
 ### Conclusion
 With this combination of direct and indirect elections, clients in the mesh are able to reach a consensus without direct connections with each other or even being aware of the full mesh population.
